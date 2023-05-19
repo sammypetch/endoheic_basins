@@ -47,6 +47,54 @@ def optimisation(month):
     beta = (np.linalg.inv((X@X_trans))@X_trans)@alpha
     return beta, beta[2], beta[8]
 
+
+def endo_energy_fluxesEXT(MASK):
+    w2m = 28.9 # watts per square meter to mm/day
+    
+    DSR = mask_and_weight(DSR_global[22:,:,:], MASK)/w2m
+    DLR = mask_and_weight(DLR_global[22:,:,:], MASK)/w2m
+    USW = mask_and_weight(USW_global[22:,:,:], MASK)/w2m
+    ULW = mask_and_weight(ULW_global[22:,:,:], MASK)/w2m
+    LEm  =  mask_and_weight(LE[12:156], MASK)
+    SHm =  mask_and_weight(SH[12:156], MASK)  
+    
+    # Mean seasonal cycle LE 
+    msc_LE = monthly_mean(LEm)
+     # need to add 7 more years 
+    LE2 = np.array(list(msc_LE)*7)
+    # add additional 7 years 
+    LE2m = np.append(LEm, LE2[:-1])
+    
+    # Mean seasonal cycle LE 
+    msc_SH = monthly_mean(SHm)
+     # need to add 7 more years 
+    SH2 = np.array(list(msc_SH)*7)
+    # add additional 7 years 
+    SH2m = np.append(SHm, SH2[:-1])
+
+
+
+    NET = DSR[:-6] + DLR[:-6] -USW[:-6] - ULW[:-6] - LE2m[0:216] - SH2m[0:216] 
+    return  DSR[:216], DLR[0:216], USW[0:216], ULW[0:216], SH2m[0:216], NET  
+
+def endo_fluxes_EXT(MASK):
+
+    Pm = mask_and_weight(P[12:-5], MASK) # P 2002 - 2021 227 months
+    dSm =  mask_and_weight(dS[:], MASK) # dS JAN 2002 to 2020
+    LEm =  mask_and_weight(LE[12:156], MASK) # dS JAN 2002 to 2020
+
+    # Mean seasonal cycle LE 
+    msc_LE = monthly_mean(LEm)
+     # need to add 7 more years 
+    LE2 = np.array(list(msc_LE)*7)
+    # add additional 7 years 
+    LE2m = np.append(LEm, LE2[:-1])
+    
+    Res = Pm[:] - LE2m[:]- dSm[:] #2002 to 2013
+    return Pm[0:216], LE2m[0:216], dSm[0:216], Res[0:216]
+
+
+
   def deseason(storage):
     '''
     deseasonalised storage cycle for 18 years 
@@ -90,5 +138,77 @@ def som_stor2020(storage):
     som_stor = np.zeros(227)
     for i in range(227):
         som_stor[i] = ((storage2[i+1] + storage2[i])/2)
-    return som_stor[0:216]  
+    return som_stor[0:216]
 
+def weight_ENDO(masked_data, Region):
+    '''
+    weights dats according to gridbox size
+    '''
+    weight = mask_ENDO2D(clat2D, Region)
+    a = len(masked_data[:,0,0])
+    weighted_data = np.zeros(a)
+    for i in range(a):
+        weighted_data[i] =(masked_data[i,:,:]*weight).sum()/(weight).sum()
+    return weighted_data
+
+
+def mask_ENDO2D(data,Region):
+    '''
+    input:
+    '''
+    mask_boolean = np.zeros(shape =(360,720))
+    for i in range(360):
+        for j in range(720):
+            if Region[i,j] > 0:
+                mask_boolean[i,j] = 0
+            else:
+                mask_boolean[i,j] = 1
+    masked_data = ma.masked_array(data, mask = mask_boolean)
+    return masked_data
+
+def mask_ENDO(data, Region):
+    '''
+    input:
+    '''
+    a = len(data[:,1])
+    mask_boolean = np.zeros(shape =(a,360,720))
+    for i in range(360):
+        for j in range(720):
+            if Region[i,j] > 0:
+                mask_boolean[:,i,j] = 0
+            else:
+                mask_boolean[:,i,j] = 1
+    masked_data = ma.masked_array(data, mask = mask_boolean)
+    return masked_data
+
+
+
+def mask_and_weight(data, Region):
+    '''
+    weights dats according to gridbox size
+    '''
+    a = len(data[:,1])
+    mask_boolean = np.zeros(shape =(a,360,720))
+    for i in range(360):
+        for j in range(720):
+            if Region[i,j] > 0:
+                mask_boolean[:,i,j] = 0
+            else:
+                mask_boolean[:,i,j] = 1
+    masked_data = ma.masked_array(data, mask = mask_boolean)  
+    
+    weight = mask_ENDO2D(clat2D, Region)
+    a = len(masked_data[:,0,0])
+    weighted_data = np.zeros(a)
+    for i in range(a):
+        weighted_data[i] =(masked_data[i,:,:]*weight).sum()/(weight).sum()
+    return weighted_data
+
+def monthly_mean(data):
+    '''
+    Mean seasonal cycle
+    '''
+    monthly_mean = np.zeros(12)
+    for i in range(12):
+        monthly_mean[i] = np.mean(data[i:len(data):12])
+    return monthly_mean
